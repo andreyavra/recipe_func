@@ -11,6 +11,7 @@ app = Flask(__name__)
 # APIs
 # https://spoonacular.com/food-api/docs
 # http://store.ncss.cloud/docs/
+# Andrey's testing room: https://chat.ncss.cloud/syd-2-andrey
 
 
 # Storage Functions
