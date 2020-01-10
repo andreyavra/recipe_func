@@ -12,6 +12,7 @@ app = Flask(__name__)
 # https://spoonacular.com/food-api/docs
 # http://store.ncss.cloud/docs/
 # Andrey's testing room: https://chat.ncss.cloud/syd-2-andrey
+# Final Product Room: https://chat.ncss.cloud/syd-2-alfred
 
 
 # Storage Functions
@@ -57,13 +58,25 @@ def get_recipe_choice():
   m = RECIPE_CHOICE_PATTERN.match(message)
   print("2work")
   if m is None:
-    print("That isn't a valid choice but return please")
+    return jsonify({
+      'author': 'Chef Bot',
+      'room': args['room'],
+      'text': "That isn't a valid response. Please try again"
+    })
   else:
     print("3work")
     choice = m.group('choice')
-    recipe_id = get_item(f"syd-2/users/{args['author']}/choices")[choice]
+    recipe_id = get_item(f"syd-2/searched-recipes/{args['author']}/choices")[choice]
     print("4work")
-    store_item(f"syd-2/users/{args['author']}", recipe_id)
+    store_item(f"syd-2/searched-recipes/{args['author']}", recipe_id)
+
+    return jsonify({
+      'author': 'Chef Bot',
+      'room': args['room'],
+      'text': "It worked!"
+    })
+
+
 
 
 
@@ -124,7 +137,7 @@ def get_recipe():
 
     text += f'{i+1}: {title}<br>'
 
-  store_item(f"syd-2/users/{args['author']}/choices", user_recipes)
+  store_item(f"syd-2/searched-recipes/{args['author']}/choices", user_recipes)
   text = text.strip('<br>')
 
   return jsonify({
