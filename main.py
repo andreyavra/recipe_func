@@ -1,11 +1,13 @@
 from flask import Flask, request, jsonify
 import requests
 import re
+from pprint import pprint
 
 # GLOBALS
 RECIPE_ASK_PATTERN = re.compile(r"([Ww]hat's|[Gg]imme|[Gg]ive me|[Cc]huck me|[Cc]huck us) ((a )?recipe|(some )?food)( cuz)? ?(?P<args>.*)")
 RECIPE_CHOICE_PATTERN = re.compile(r"^(?P<choice>[0-9]+)$")
 STORAGE_LINK = 'https://store.ncss.cloud/'
+INGREDIENTS_API = 'https://store.ncss.cloud/syd-2-foodLists'
 app = Flask(__name__)
 
 # APIs
@@ -42,6 +44,14 @@ def add_to_dict(key, dic_key, dic_value):
 
 
 
+def get_ingredients():
+  ingredients = {}
+  all_food = requests.get(INGREDIENTS_API).json()
+  for section in all_food:
+    for food_item in all_food[section]:
+      ingredients[food_item] = all_food[section][food_item]
+  print(ingredients)
+  return ingredients
 
 
 
@@ -53,12 +63,19 @@ def get_recipe_choice():
   message = args['text']
   author = args['author']
   room = args['room']
+  agent = args['agent']
+
+  if agent == "Alexa":
+    html_break = ' '
+  else:
+    html_break = '<br>'
+
 
   m = RECIPE_CHOICE_PATTERN.match(message)
   if m is None:
     text = "That isn't a valid response. Please try again. Select an option from 1 to 20"
     return jsonify({
-      'author': 'Chef Bot',
+      'author': 'Alfred',
       'room': args['room'],
       'text': text
     })
@@ -69,7 +86,7 @@ def get_recipe_choice():
     store_item(f"syd-2/searched-recipes/{args['author']}", recipe_id)
 
     return jsonify({
-      'author': 'Chef Bot',
+      'author': 'Alfred',
       'room': args['room'],
       'text': f"Item {choice} selected"
     })
@@ -77,7 +94,11 @@ def get_recipe_choice():
 
 
 
+'''
+Here I will try make a good regex string
 
+What's a dish I can make(?P<args>)\?
+'''
 
 
 
@@ -87,60 +108,81 @@ def get_recipe():
   resp = request.get_json()
 
   message = resp['text']
+  print(resp['params'])
 
-
-  m = RECIPE_ASK_PATTERN.match(message)
-  if m is None:
-    print("INCORRECT AI YA")
-
+  if 'agent' in resp:
+    html_break = ' '
   else:
-    args = m.group('args')
+    html_break = '<br>'
 
-    # BELOW IS THE TEST CODE FOR INGREDIENTS
-    ingredients = {
-      'cheese':{'quantity':2, 'expiration': '04042019'},
-      'chicken':{'quantity':1, 'expiration': '05052020'}
-    }
+  args = resp['params']['choice']
 
-    query = ""
-    for ingredient_name in ingredients:
-      curr_query = ingredient_name
-      quantity = ingredients[ingredient_name]['quantity']
-      if quantity > 1:
-        curr_query += "&number=" + str(quantity)
-      curr_query += ',+'
-      query += curr_query
+  # BELOW IS THE TEST CODE FOR INGREDIENTS
+  ingredients = get_ingredients()
 
-    query = query.strip(',+')
+  print(ingredients)
 
-    print(query)
-
-    _params = {
-      'ingredients': query, 
-      'apiKey':'72aef675c4284f2ca32357d241c42284', 
-      'number':20
-    }
-
-    recipes = requests.get("https://api.spoonacular.com/recipes/findByIngredients", params=_params).json()
-      
-    user_recipes = {}
-    text = "Please pick an option by entering a number:<br>"
-
-    for i in range(len(recipes)):
-      title = recipes[i]['title']
-      recipe_id = recipes[i]['id']
-      user_recipes[i+1] = recipe_id
-
-      text += f'{i+1}: {title}<br>'
-
-    store_item(f"syd-2/searched-recipes/{resp['author']}/choices", user_recipes)
-    text = text.strip('<br>')
-
+  if ingredients == {}:
     return jsonify({
-      'author': 'Chef Bot',
+      'author': 'Alfred',
       'room': resp['room'],
-      'text': text
+      'text': "You don't have any ingredients, silly."
     })
+
+  query = ""
+  for ingredient_name in ingredients:
+    curr_query = ingredient_name
+    quantity = ingredients[ingredient_name]['quantity']
+    #below if the ingredients come as quantity only
+    #quantity = ingredients[ingredient_name]
+    if quantity > 1:
+      curr_query += "&number=" + str(quantity)
+    curr_query += ',+'
+    query += curr_query
+
+  query = query.strip(',+')
+
+  _params = {
+    'ingredients': query, 
+    'apiKey':'72aef675c4284f2ca32357d241c42284', 
+    'number':20
+  }
+
+  recipes = requests.get("https://api.spoonacular.com/recipes/findByIngredients", params=_params).json()
+
+  user_recipes = {}
+  text = f"Please pick an option by entering a number:{html_break}"
+
+  # invalid_recipes contains the recipes with 2 or more missing ingredients
+  invalid_recipes = []
+
+  for i in range(len(recipes)):
+    recipe_name = recipes[i]['title']
+    recipe_id = recipes[i]['id']
+    
+    missing_ingredient_count = recipes[i]['missedIngredientCount']
+    # pprint(recipes[i])
+    # print(missing_ingredient_count)
+    # print('\n')
+
+    if missing_ingredient_count == 0:
+      user_recipes[i+1] = recipe_id
+      text += f'{i+1}: {recipe_name}{html_break}'
+    elif missing_ingredient_count == 1:
+      missing_ingredient = recipes[i]['missedIngredients'][0]['name']
+      user_recipes[i+1] = recipe_id
+      text += f'{i+1}: {recipe_name}, missing {missing_ingredient}{html_break}'
+    else:
+      invalid_recipes.append(recipes[i])
+
+  store_item(f"syd-2/searched-recipes/{resp['author']}/choices", user_recipes)
+  text = text.strip(f'{html_break}')
+
+  return jsonify({
+    'author': 'Alfred',
+    'room': resp['room'],
+    'text': text
+  })
 
 
 
