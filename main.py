@@ -20,7 +20,6 @@ app = Flask(__name__)
 # Storage Functions
 def store_item(key, item):
   room = STORAGE_LINK + str(key)
-  print(item)
   resp = requests.post(room, json=item)
   
 
@@ -50,7 +49,6 @@ def get_ingredients():
   for section in all_food:
     for food_item in all_food[section]:
       ingredients[food_item] = all_food[section][food_item]
-  print(ingredients)
   return ingredients
 
 
@@ -58,38 +56,26 @@ def get_ingredients():
 
 @app.route('/get_recipe_choice', methods=['POST'])
 def get_recipe_choice():
-  args = request.get_json()
+  resp = request.get_json()
 
-  message = args['text']
-  author = args['author']
-  room = args['room']
-  agent = args['agent']
+  message = resp['text']
+  author = resp['author']
+  room = resp['room']
 
-  if agent == "Alexa":
+  if 'agent' in resp:
     html_break = ' '
   else:
     html_break = '<br>'
 
+  choice = resp['params']['choice']
+  recipe_id = get_item(f"syd-2/searched-recipes/{author}/choices")[choice]
+  store_item(f"syd-2/searched-recipes/{author}", recipe_id)
 
-  m = RECIPE_CHOICE_PATTERN.match(message)
-  if m is None:
-    text = "That isn't a valid response. Please try again. Select an option from 1 to 20"
-    return jsonify({
-      'author': 'Alfred',
-      'room': args['room'],
-      'text': text
-    })
-  else:
-    choice = m.group('choice')
-    recipe_id = get_item(f"syd-2/searched-recipes/{args['author']}/choices")[choice]
-    print("4work")
-    store_item(f"syd-2/searched-recipes/{args['author']}", recipe_id)
-
-    return jsonify({
-      'author': 'Alfred',
-      'room': args['room'],
-      'text': f"Item {choice} selected"
-    })
+  return jsonify({
+    'author': 'Alfred',
+    'room': room,
+    'text': f"Item {choice} selected"
+  })
 
 
 
@@ -115,12 +101,10 @@ def get_recipe():
   else:
     html_break = '<br>'
 
-  args = resp['params']['choice']
+  args = resp['params']['string']
 
   # BELOW IS THE TEST CODE FOR INGREDIENTS
   ingredients = get_ingredients()
-
-  print(ingredients)
 
   if ingredients == {}:
     return jsonify({
@@ -145,7 +129,7 @@ def get_recipe():
   _params = {
     'ingredients': query, 
     'apiKey':'72aef675c4284f2ca32357d241c42284', 
-    'number':20
+    'number':100
   }
 
   recipes = requests.get("https://api.spoonacular.com/recipes/findByIngredients", params=_params).json()
@@ -161,22 +145,24 @@ def get_recipe():
     recipe_id = recipes[i]['id']
     
     missing_ingredient_count = recipes[i]['missedIngredientCount']
-    # pprint(recipes[i])
-    # print(missing_ingredient_count)
-    # print('\n')
+    print(missing_ingredient_count)
 
     if missing_ingredient_count == 0:
       user_recipes[i+1] = recipe_id
       text += f'{i+1}: {recipe_name}{html_break}'
-    elif missing_ingredient_count == 1:
+      print("work0")
+    elif missing_ingredient_count <= 5:
       missing_ingredient = recipes[i]['missedIngredients'][0]['name']
       user_recipes[i+1] = recipe_id
       text += f'{i+1}: {recipe_name}, missing {missing_ingredient}{html_break}'
+      print("work1")
     else:
       invalid_recipes.append(recipes[i])
 
   store_item(f"syd-2/searched-recipes/{resp['author']}/choices", user_recipes)
   text = text.strip(f'{html_break}')
+
+  print(text)
 
   return jsonify({
     'author': 'Alfred',
